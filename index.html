@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Magic Tiles Lite — Hard Mode + Music (v11)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Magic Tiles Lite — Hard Mode + Music (v12)</title>
   <style>
     :root{--tile-top:#4facfe;--tile-bottom:#00f2fe;--bg-1:#0f0c29;--bg-2:#302b63;--bg-3:#24243e;}
     html,body{margin:0;padding:0;height:100%;overflow:hidden;font-family:"Segoe UI",Tahoma,Geneva,Verdana,sans-serif;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--bg-1),var(--bg-2),var(--bg-3));background-size:400% 400%;animation:bgShift 20s ease-in-out infinite;}
@@ -41,7 +41,122 @@
 
   <div id="overlay">Tap anywhere or press any key<br/>to start</div>
 
-  <!-- (The rest of your script stays exactly the same) -->
-  <!-- ... -->
+  <script>
+  (function(){
+    const canvas=document.getElementById('gameCanvas');
+    const ctx=canvas.getContext('2d');
+    const scoreEl=document.getElementById('score');
+    const progBar=document.getElementById('progressBar');
+    const starEl=document.getElementById('star');
+    const audio=document.getElementById('bgm');
+    const overlay=document.getElementById('overlay');
+    const audioBtn=document.getElementById('audioBtn');
+
+    const LANES=4, LANE_WIDTH=canvas.width/LANES, TILE_HEIGHT=110;
+    const BPM=93, SPAWN_INTERVAL=60000/BPM;
+    const BASE_SPEED=4.5, SPEED_STEP=0.08, MAX_PROGRESS=100;
+
+    let tiles=[], speed=BASE_SPEED, score=0;
+    let running=false, barFull=false, spawnTimer=null;
+
+    function spawnTile(){tiles.push({lane:Math.floor(Math.random()*LANES),y:-TILE_HEIGHT});}
+    function updateScore(v){
+      scoreEl.textContent=`Score ${v}`;
+      progBar.style.width=`${Math.min(v,MAX_PROGRESS)/MAX_PROGRESS*100}%`;
+      if(!barFull&&v>=MAX_PROGRESS)celebrate();
+    }
+    function celebrate(){
+      barFull=true;
+      document.body.classList.add('celebrate');
+      starEl.classList.add('shine');
+      document.documentElement.style.setProperty('--tile-top','#ff9a9e');
+      document.documentElement.style.setProperty('--tile-bottom','#fad0c4');
+    }
+
+    function startGame(){
+      if(running) return;
+      running=true;barFull=false;tiles=[];score=0;speed=BASE_SPEED;
+      document.body.classList.remove('celebrate');
+      starEl.classList.remove('shine');
+      document.documentElement.style.setProperty('--tile-top','#4facfe');
+      document.documentElement.style.setProperty('--tile-bottom','#00f2fe');
+      updateScore(0);
+      overlay.style.display='none';
+      spawnTile();
+      clearInterval(spawnTimer);
+      spawnTimer=setInterval(spawnTile,SPAWN_INTERVAL);
+      requestAnimationFrame(loop);
+    }
+    function endGame(){
+      running=false;
+      clearInterval(spawnTimer);
+      spawnTimer=null;
+      overlay.innerHTML='Game Over<br/>Tap anywhere or press any key to restart';
+      overlay.style.display='block';
+    }
+
+    function hit(l,clickY){
+      if(!running)return;
+      const tgt=tiles.find(t=>clickY===null
+        ? t.lane===l && t.y+TILE_HEIGHT>canvas.height-TILE_HEIGHT*1.25
+        : t.lane===l && clickY>=t.y && clickY<=t.y+TILE_HEIGHT);
+      if(tgt){
+        score++;updateScore(score);speed+=SPEED_STEP;
+        tiles.splice(tiles.indexOf(tgt),1);
+      }else endGame();
+    }
+
+    function drawTile(l,y){
+      const x=l*LANE_WIDTH+4;
+      const g=ctx.createLinearGradient(0,y,0,y+TILE_HEIGHT);
+      g.addColorStop(0,getComputedStyle(document.documentElement).getPropertyValue('--tile-top'));
+      g.addColorStop(1,getComputedStyle(document.documentElement).getPropertyValue('--tile-bottom'));
+      ctx.fillStyle=g;
+      ctx.shadowColor='#fff';
+      ctx.shadowBlur=barFull?15:10;
+      ctx.fillRect(x,y,LANE_WIDTH-8,TILE_HEIGHT);
+      ctx.shadowBlur=0;
+    }
+    function loop(){
+      if(!running)return;
+      tiles.forEach(t=>t.y+=speed);
+      if(tiles.some(t=>t.y+TILE_HEIGHT>=canvas.height)){endGame();return;}
+      tiles=tiles.filter(t=>t.y<canvas.height);
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      tiles.forEach(t=>drawTile(t.lane,t.y));
+      requestAnimationFrame(loop);
+    }
+
+    // AUDIO
+    audio.loop=true;
+    function updateIcon(){audioBtn.textContent=audio.paused?'🔊':'🔈';}
+    audioBtn.addEventListener('pointerdown',e=>e.stopPropagation());
+    audioBtn.addEventListener('click',e=>{
+      e.stopPropagation();
+      if(audio.paused){
+        audio.play().then(updateIcon).catch(()=>alert('Audio failed to play (browser block)'));
+      }else{
+        audio.pause();updateIcon();
+      }
+    });
+    audio.addEventListener('play',updateIcon);
+    audio.addEventListener('pause',updateIcon);
+
+    // INPUT
+    document.addEventListener('pointerdown',e=>{
+      if(e.target===audioBtn) return;
+      const rect=canvas.getBoundingClientRect();
+      const lane=Math.floor((e.clientX-rect.left)/LANE_WIDTH);
+      const y=e.clientY-rect.top;
+      if(!running) startGame(); else hit(lane,e.target===canvas?y:null);
+    });
+    document.addEventListener('keydown',e=>{
+      const map={d:0,f:1,j:2,k:3}[e.key.toLowerCase()];
+      if(!running) startGame(); else if(map!==undefined) hit(map,null);
+    });
+
+    updateScore(0);updateIcon();
+  })();
+  </script>
 </body>
 </html>
